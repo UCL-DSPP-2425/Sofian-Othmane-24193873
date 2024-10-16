@@ -1,0 +1,159 @@
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(gganimate)
+
+# Load the dataset
+url <- "https://www.dropbox.com/scl/fi/9d6ctufur3g72nfdtneea/countypres_2000-2020.csv?rlkey=vm0mtz12wgh6qxsgf7ops6pjx&dl=1"
+election_data <- read_csv(url)
+
+# Check the column names
+colnames(election_data)
+
+# Step 1: Filter the 2020 election results and summarize votes by party at the state level
+election_2020 <- election_data %>%
+  filter(year == 2020)
+
+# Summarize vote counts and calculate the winner by state
+state_summary <- election_2020 %>%
+  group_by(state, party) %>%
+  summarize(votes = sum(candidatevotes), .groups = 'drop') %>%
+  pivot_wider(names_from = party, values_from = votes, values_fill = 0) %>%
+  mutate(winner = ifelse(DEMOCRAT > REPUBLICAN, "Democrat", "Republican"))
+
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(maps)
+
+# Load U.S. state boundaries
+states <- map_data("state")
+
+# Ensure state names match between datasets (convert to lowercase for merging)
+state_summary$state <- tolower(state_summary$state)
+
+# Merge with state boundaries
+state_results <- merge(states, state_summary, by.x = "region", by.y = "state")
+
+# Calculate state centroids for label placement
+state_centroids <- state_results %>%
+  group_by(region) %>%
+  summarize(
+    long = mean(range(long)),
+    lat = mean(range(lat)),
+    winner = first(winner)  # Include winner information
+  )
+
+# Plot state winners map
+state_winners_plot <- ggplot() +
+  geom_polygon(data = state_results, aes(long, lat, group = group, fill = winner), color = "#CEC7C7") +
+  geom_text(data = state_centroids, aes(long, lat, label = toupper(substr(region, 1, 2))), 
+            size = 2.5, color = "white", fontface = "bold") +
+  scale_fill_manual(values = c("Democrat" = "#4646ff", "Republican" = "#ff4848"),
+                    name = "Party") +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.title = element_text(hjust = 0.5, size = 17, margin = margin(t = 25)),
+    legend.position = "right",
+    legend.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(title = "2020 US Election: State Winners") +
+  coord_map() +
+  expand_limits(x = c(-125, -65), y = c(25, 50))
+
+# Save the improved state winners plot as a PNG
+ggsave("state_winners_2020.png", plot = state_winners_plot, width = 10, height = 6, bg = "white")
+
+
+# Step 3: Republican Vote Share Map
+# Calculate Republican vote share
+state_summary <- state_summary %>%
+  mutate(rep_share = REPUBLICAN / (DEMOCRAT + REPUBLICAN) * 100)
+
+# Merge with state boundaries
+state_results <- merge(states, state_summary, by.x = "region", by.y = "state")
+
+# Plot Republican vote share map
+library(ggplot2)
+library(dplyr)
+library(maps)
+
+# Assuming state_results is already created and contains the necessary data
+
+# Calculate state centroids for label placement
+state_centroids <- state_results %>%
+  group_by(region) %>%
+  summarize(
+    long = mean(range(long)),
+    lat = mean(range(lat)),
+    rep_share = first(rep_share)
+  )
+
+rep_vote_share_plot <- ggplot() +
+  geom_polygon(data = state_results, aes(long, lat, group = group, fill = rep_share), color = "#fffafaa6") +
+  geom_text(data = state_centroids, aes(long, lat, label = toupper(substr(region, 1, 2))), 
+            size = 2.5, color = "black", fontface = "bold") +
+  scale_fill_gradient(low = "white", high = "red", name = "Republican Share") +
+  theme_void() +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.title = element_text(hjust = 0.5, size = 15, margin = margin(t = 10)),
+    legend.position = "right", (margin(t = 15)),
+    legend.title = element_text(angle = 90, vjust = 0.5)
+  ) +
+  labs(title = "2020 US Election: Republican Vote Share (%)") +
+  coord_map() +
+  expand_limits(x = c(-125, -65), y = c(25, 50))
+
+# Save the improved Republican vote share plot as a PNG
+ggsave("republican_vote_share_2020.png", plot = rep_vote_share_plot, width = 10, height = 6, bg = "white")
+
+# Step 4: County-Level Summary (2000-2020)
+# Summarize vote counts at the county level from 2000 to 2020
+county_results <- election_data %>%
+  group_by(year, county_name) %>%
+  summarize(dem_votes = sum(candidatevotes[party == "DEMOCRAT"]),
+            rep_votes = sum(candidatevotes[party == "REPUBLICAN"]),
+            winner = ifelse(dem_votes > rep_votes, "Democrat", "Republican"), .groups = 'drop')
+
+# Step 5: County-Level Visualization (Faceted by Year)
+# Load county boundaries
+counties <- map_data("county")
+
+# Ensure county names match between datasets
+county_results$county_name <- tolower(county_results$county_name)
+
+# Merge with county boundaries
+county_results_map <- merge(counties, county_results, by.x = "subregion", by.y = "county_name")
+
+# Plot county-level results, faceted by year
+county_facet_plot <- ggplot(county_results_map, aes(long, lat, group = group, fill = winner)) +
+  geom_polygon(color = "#0000001a") +
+  scale_fill_manual(values = c("Democrat" = "blue", "Republican" = "red")) +
+  facet_wrap(~ year) +
+  theme(panel.background = element_rect(fill = "white", color = NA)) +
+labs(title = "US Presidential Election Results by County (2000-2020)") +
+theme(
+    plot.title = element_text(hjust = 0.5, size = 17, margin = margin(t = 25))
+)
+
+# Save the county election results plot as a PNG
+ggsave("county_election_results_2000_2020.png", plot = county_facet_plot, width = 10, height = 8)
+
+# Step 6: Animated U.S. Election Map (2000-2020)
+# Create an animated map showing the winner by county for each election year
+county_animation <- ggplot(county_results_map, aes(long, lat, group = group, fill = winner)) +
+  geom_polygon(color = "#fdfdfd38") +
+  scale_fill_manual(values = c("Democrat" = "blue", "Republican" = "red")) +
+  theme(panel.background = element_rect(fill = "white", color = NA)) +
+  labs(title = "US Presidential Election Results: {frame_time}") +
+  transition_time(year) +
+  ease_aes('linear')
+
+# Save the animation as a GIF
+anim_save("us_election_animation_2000_2020.gif", animation = county_animation, fps = 2, duration = 10, width = 800, height = 600)
