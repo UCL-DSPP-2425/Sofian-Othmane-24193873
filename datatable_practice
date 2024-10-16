@@ -1,0 +1,73 @@
+##################################
+# PRACTICE QUESTIONS
+# 1) Plot distribution of ratings (1-5) in histogram
+# 2) What was the highest rated movie watched in 2006? (minimum 100 reviews)
+##################################
+
+rm(list = ls())
+
+library(data.table)
+
+read_path <- paste0(
+  "/mnt/c/Users/sekha/Dropbox/Teaching/UCL/",
+  "datasets/ml-25m/ml-25m/"
+)
+
+# answer to 1)
+
+library(ggplot2)
+
+ratings <- fread(paste0(read_path, "ratings.csv"))
+ratings[, rating_round := round(rating)]
+ggplot(ratings, aes(x = rating_round)) +
+  geom_histogram()
+
+# answer to 2)
+
+ratings[, time := as.POSIXct(timestamp, origin = "1970-01-01")]
+
+ratings[, year := format(time, "%Y")]
+
+rating_mean <- ratings[year == 2006,
+  n_ratings := .N,
+  by = movieId
+][
+  n_ratings > 100,
+  mean(rating),
+  by = movieId
+]
+
+movies <- fread(paste0(read_path, "movies.csv"))
+
+setkey(movies, movieId)
+setkey(rating_mean, movieId)
+
+dt_merge <- movies[rating_mean]
+
+dt <- dt_merge[order(dt_merge$V1, decreasing = TRUE), ]
+
+# repeat query with dtpylr https://dtplyr.tidyverse.org/
+
+library(dtplyr)
+library(dplyr)
+
+ratings2 <- lazy_dt(ratings)
+movies2 <- lazy_dt(movies)
+
+ratings2 %>%
+  filter(year == 2006) %>%
+  group_by(movieId) %>%
+  summarise(avg_rating = mean(rating), num_reviews = n()) %>%
+  filter(num_reviews >= 100) %>%
+  left_join(movies2) %>%
+  arrange(desc(avg_rating))
+
+results <- ratings2 %>%
+  filter(year == 2006) %>%
+  group_by(movieId) %>%
+  summarise(avg_rating = mean(rating), num_reviews = n()) %>%
+  filter(num_reviews >= 100) %>%
+  left_join(movies2) %>%
+  arrange(desc(avg_rating))
+
+results <- as.data.frame(results)
